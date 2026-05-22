@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compressive Testing Timeliness | Big Ben RMC</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-app-compat.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-database-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <img src="logo.png" alt="Big Ben" class="logo-img" onerror="this.style.display='none';document.getElementById('logo-fb').style.display='flex'">
+      <div class="logo-fallback" id="logo-fb">BB</div>
+      <div class="header-text">
+        <div class="header-title">Compressive Testing Timeliness</div>
+        <div class="header-sub">Big Ben Ready Mix Concrete - QC Department - ASTM C-39</div>
+        <div class="header-sub">Target: <strong>100% On-Time Testing</strong> | <span id="cur-date"></span></div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span id="online-indicator" class="online-badge">Online</span>
+      <select id="sel-month" class="select-input"></select>
+      <button class="btn-outline" onclick="exportCSV()">Export CSV</button>
+      <button class="btn-danger-sm" onclick="clearAllData()">Clear Data</button>
+      <button class="btn-primary" onclick="openAddForm()">+ Log Specimen</button>
+    </div>
+  </header>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="setTab('kpi',this)">KPI Overview</button>
+    <button class="tab" onclick="setTab('log',this)">Specimen Log</button>
+    <button class="tab" onclick="setTab('holidays',this)">Holidays <span class="doc-badge" id="holiday-count">0</span></button>
+  </div>
+
+  <!-- TAB: KPI -->
+  <div id="tab-kpi" class="tab-content active">
+    <div class="overall-card" id="overall-card">
+      <div class="overall-left">
+        <div class="overall-label">Overall Monthly Timeliness Rate</div>
+        <div class="overall-big"><span id="overall-pct">0%</span><span class="overall-target">/ 100% target</span></div>
+        <div class="run-bar"><div class="run-fill" id="overall-bar"></div></div>
+        <div class="run-note" id="overall-note"></div>
+      </div>
+      <div class="overall-right">
+        <div class="mini-stat" id="mini-total"><div class="ms-val">0</div><div class="ms-lbl">Total</div></div>
+        <div class="mini-stat" id="mini-pass"><div class="ms-val g">0</div><div class="ms-lbl">On Time</div></div>
+        <div class="mini-stat" id="mini-rej"><div class="ms-val r">0</div><div class="ms-lbl">Late</div></div>
+        <div class="mini-stat" id="mini-pend"><div class="ms-val w">0</div><div class="ms-lbl">Pending</div></div>
+      </div>
+    </div>
+
+    <div class="section-hd">Per No. of Days -- Timeliness Rate vs 100% Target</div>
+    <div class="gauge-grid" id="gauge-age-grid"></div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="card-title">
+        Daily Timeliness Trend -- <span id="trend-month-label"></span>
+        <span class="legend-row">
+          <span class="leg"><span class="leg-sq" style="background:#3B6D11"></span>On-time %</span>
+          <span class="leg"><span class="leg-sq" style="background:#E24B4A;opacity:.6"></span>Late</span>
+          <span class="leg"><span class="leg-sq" style="background:#378ADD"></span>100% target</span>
+        </span>
+      </div>
+      <div style="height:150px;position:relative"><canvas id="chartTrend"></canvas></div>
+    </div>
+
+    <div class="card" style="margin-top:12px">
+      <div class="card-title">
+        Upcoming Due Tests -- Next 7 Days
+        <span class="legend-row">
+          <span class="leg"><span class="leg-sq" style="background:#E24B4A"></span>Overdue</span>
+          <span class="leg"><span class="leg-sq" style="background:#EF9F27"></span>Due today</span>
+          <span class="leg"><span class="leg-sq" style="background:#378ADD"></span>Upcoming</span>
+        </span>
+      </div>
+      <div id="upcoming-list" style="font-size:12px"></div>
+    </div>
+  </div>
+
+  <!-- TAB: LOG -->
+  <div id="tab-log" class="tab-content">
+    <div class="log-toolbar">
+      <div class="log-title">Specimen Log -- <span id="log-month-label"></span></div>
+      <div class="log-controls">
+        <input type="text" id="search-box" placeholder="Search lab no., client, project..." class="select-input" style="min-width:200px" oninput="renderLog()">
+        <select id="filter-days" class="select-input" onchange="renderLog()">
+          <option value="">All days</option>
+          <option>01 Days</option><option>03 Days</option><option>07 Days</option>
+          <option>14 Days</option><option>28 Days</option>
+        </select>
+        <select id="filter-status" class="select-input" onchange="renderLog()">
+          <option value="">All status</option>
+          <option>On Time</option><option>Late</option><option>Pending</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="log-tbl">
+        <thead>
+          <tr>
+            <th>Date Casted</th>
+            <th>Date Testing</th>
+            <th>Age</th>
+            <th>Lab No.</th>
+            <th>Testing Center</th>
+            <th>Branch</th>
+            <th>Client Name</th>
+            <th>Project Title / Name</th>
+            <th>Location</th>
+            <th>Structure</th>
+            <th>Design (PSI)</th>
+            <th>Agg. Size</th>
+            <th>No. of Days</th>
+            <th>Due Date</th>
+            <th>Status</th>
+            <th>Coordinator</th>
+            <th>Remarks</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="log-body"></tbody>
+      </table>
+    </div>
+    <div class="log-footer" id="log-footer"></div>
+  </div>
+
+  <!-- TAB: HOLIDAYS -->
+  <div id="tab-holidays" class="tab-content">
+    <div class="log-toolbar">
+      <div class="log-title">Holiday Manager</div>
+      <button class="btn-primary" onclick="openHolidayForm()">+ Add Holiday</button>
+    </div>
+    <div class="form-panel" id="holiday-form-panel">
+      <div class="form-title">Add Holiday</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Date</label><input type="date" id="hf-date"></div>
+        <div class="form-group"><label>Holiday Name</label><input type="text" id="hf-name" placeholder="e.g. Christmas Day"></div>
+        <div class="form-group"><label>Type</label>
+          <select id="hf-type">
+            <option>Regular Holiday</option>
+            <option>Special Non-Working</option>
+            <option>Company Holiday</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="closeHolidayForm()">Cancel</button>
+        <button class="btn-primary" onclick="saveHoliday()">Save Holiday</button>
+      </div>
+    </div>
+    <div id="holiday-list"></div>
+  </div>
+
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="delivery-modal" onclick="if(event.target===this)closeDeliveryModal()">
+  <div class="modal" style="width:min(640px,98%)">
+    <div class="modal-title" id="modal-title">Log New Specimen</div>
+
+    <div class="form-grid">
+      <div class="form-group"><label>Date Casted <span class="req">*</span></label><input type="date" id="m-casted" onchange="computeDueDate()"></div>
+      <div class="form-group"><label>Date Testing</label><input type="date" id="m-tested" onchange="computeAgeAndStatus()"></div>
+      <div class="form-group">
+        <label>Age (days) <span style="font-size:9px;color:var(--text-2)">(auto)</span></label>
+        <input type="text" id="m-age" readonly style="background:var(--surface-2);cursor:not-allowed">
+      </div>
+      <div class="form-group"><label>Laboratory No. <span class="req">*</span></label><input type="text" id="m-labno" placeholder="e.g. BB26-CL0521-367"></div>
+      <div class="form-group"><label>Testing Center</label>
+        <select id="m-testcenter" onchange="updateBranches()">
+          <option value="">-- Select --</option>
+          <option>Megatesting Center, Inc.</option>
+          <option>Terms Concrete</option>
+          <option>EP Materials Testing Center</option>
+          <option>Philippine Geoanalytics</option>
+          <option>DPWH</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Branch</label>
+        <select id="m-branch">
+          <option value="">-- Select testing center first --</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Client Name <span class="req">*</span></label><input type="text" id="m-client" placeholder="e.g. BIGBEN / EDIESON SANTOS"></div>
+      <div class="form-group"><label>Project Title / Name <span class="req">*</span></label><input type="text" id="m-project" placeholder="e.g. EXTERNAL PARKING"></div>
+      <div class="form-group"><label>Project Location</label><input type="text" id="m-location" placeholder="e.g. DUHAT, BOCAUE BULACAN"></div>
+      <div class="form-group"><label>Structure</label><input type="text" id="m-structure" placeholder="e.g. SOG, Column, Footing"></div>
+      <div class="form-group"><label>Design (PSI)</label><input type="text" id="m-design" placeholder="e.g. 4000 PSI"></div>
+      <div class="form-group"><label>Aggregate Size</label>
+        <select id="m-aggsize">
+          <option value="">-- Select --</option>
+          <option>Agg - G1"</option>
+          <option>Agg - 3/4"</option>
+          <option>Agg - 3/8"</option>
+        </select>
+      </div>
+      <div class="form-group"><label>No. of Days <span class="req">*</span></label>
+        <select id="m-days" onchange="computeDueDate()">
+          <option value="">-- Select --</option>
+          <option>01 Days</option>
+          <option>03 Days</option>
+          <option>07 Days</option>
+          <option>14 Days</option>
+          <option>28 Days</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Due Date <span style="font-size:9px;color:var(--text-2)">(auto)</span></label>
+        <input type="date" id="m-due" readonly style="background:var(--surface-2);cursor:not-allowed">
+      </div>
+      <div class="form-group">
+        <label>Status <span style="font-size:9px;color:var(--text-2)">(auto)</span></label>
+        <input type="text" id="m-status" readonly style="background:var(--surface-2);font-weight:600;border-radius:var(--radius)">
+      </div>
+      <div class="form-group"><label>Testing Coordinator</label>
+        <select id="m-coordinator" onchange="updateCoordinatorOther()">
+          <option value="">-- Select --</option>
+          <option>Dio Balili</option>
+          <option>Joshua Facun</option>
+          <option>Roni Aguilar</option>
+          <option>JM Buitizon</option>
+          <option>Teodoro Taysa</option>
+          <option value="__other__">Other (specify)</option>
+        </select>
+      </div>
+      <div class="form-group" id="coord-other-wrap" style="display:none">
+        <label>Specify Coordinator</label>
+        <input type="text" id="m-coordinator-other" placeholder="Enter name">
+      </div>
+      <div class="form-group" style="grid-column:span 2"><label>Remarks</label>
+        <input type="text" id="m-remarks" placeholder="Optional remarks" style="width:100%">
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn-danger-sm" id="modal-delete-btn" onclick="deleteEntry()" style="display:none">Delete</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-secondary" onclick="closeDeliveryModal()">Cancel</button>
+        <button class="btn-primary" id="modal-save-btn" onclick="saveDelivery()">Save Specimen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <span class="toast-dot" id="toast-dot"></span>
+  <span id="toast-msg"></span>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
